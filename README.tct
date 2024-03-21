@@ -1,0 +1,11 @@
+Currently Depends on:
+- pyquaternion
+- scipy
+- numpy
+- gymnasium
+- pyrealsense2
+
+Packages:
+ - Motion Primatives
+ - dmp_ros
+ 
