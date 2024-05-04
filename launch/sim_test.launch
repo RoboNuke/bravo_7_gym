@@ -1,0 +1,32 @@
+<launch>
+
+    <include file="$(find bravo_arm_sw)/launch/bravo_arm.launch">
+        <arg  name="use_ps4_controller" value="false"/>
+        <arg  name="with_trisect" value="false"/>
+        <arg  name="start_rviz" value="true"/>
+        <arg  name="with_base_hand" value="false"/>
+        <arg  name="with_rigid_peg" value="false"/>
+        <arg  name="with_moveit_servo" value="false"/>
+        <arg  name="simulated" value="true"/>
+    </include>
+
+    <include file="$(find bravo_controllers)/launch/compliance_controller.launch"/>
+
+    <group ns="actor">
+        <include file="$(find bravo_7_gym)/launch/socket_nodes.launch">
+            <arg name="state_port" value="53269"/>
+            <arg name="command_port" value="65432"/>
+        </include>
+    </group>
+
+    <!--group ns="eval">
+        <include file="$(find bravo_7_gym)/launch/socket_nodes.launch">
+            <arg name="state_port" value="55269"/>
+            <arg name="command_port" value="65000"/>
+        </include>
+    </group-->
+
+
+
+</launch>
+

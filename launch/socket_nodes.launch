@@ -1,0 +1,21 @@
+<launch>
+    <arg name="command_port"
+        default="65432"
+        doc="The cmd port to use." />
+
+    <arg name="state_port"
+        default="53269"
+        doc="The pos port to use." />
+
+    <param name="pos_port" value="$(arg state_port)"/>
+    <param name="cmd_port" value="$(arg command_port)"/>
+
+    <node name="eval_state_node" pkg="bravo_7_gym" type="bravo_7_state_pub_node.py" 
+        launch-prefix="xterm -hold -e"
+    />
+
+    <node name="eval_cmd_socket_node" pkg="bravo_7_gym" type="cmd_socket_publisher.py"
+        launch-prefix="xterm -hold -e"
+    />
+
+</launch>
