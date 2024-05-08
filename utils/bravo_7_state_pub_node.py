@@ -12,7 +12,6 @@ from mlsocket import MLSocket
 
 class Bravo7StatePublisher:
     def __init__(self):
-        self.statePub = rospy.Publisher('/bravo/gym_state', JointState, queue_size=10)
 
         self.ee_link_name = rospy.get_param("ee_link", "ee_link")
         self.world_frame = rospy.get_param("world_frame", "bravo_base_link")
@@ -21,7 +20,8 @@ class Bravo7StatePublisher:
         self.joint_topic = rospy.get_param("joint_topic", "/bravo/joint_states")
         self.ft_topic = rospy.get_param("ft_sensor_topic", "/bravo/filtered_force_torque")
         self.ee_topic = rospy.get_param("ee_state_topic", "/bravo/ee_state")
-        #self.b7_topic = rospy.get_param("bravo7_state_topic", "/bravo/gym_state")
+        self.use_server = rospy.get_param("use_server", True)
+        self.b7_topic = rospy.get_param("bravo7_state_topic", "/bravo/gym_state")
         self.host = rospy.get_param("host", '127.0.0.1')
         self.pos_port = rospy.get_param("pos_port", 53269)
 
@@ -37,9 +37,11 @@ class Bravo7StatePublisher:
         self.FTSub = rospy.Subscriber(self.ft_topic, WrenchStamped, self.ft_callback)
         self.jointSub = rospy.Subscriber(self.joint_topic, JointState, self.joint_callback)
         self.eeSub = rospy.Subscriber(self.ee_topic, JointState, self.ee_callback)
-        #self.b7statePub = rospy.Publisher(self.b7_topic, Bravo7State, queue_size=1)
-        self.pos_socket = MLSocket()
-        self.lookToConnect()
+        if self.use_server:
+            self.b7statePub = rospy.Publisher(self.b7_topic, Bravo7State, queue_size=1)
+        else:
+            self.pos_socket = MLSocket()
+            self.lookToConnect()
 
     def lookToConnect(self):
         connected = False
@@ -53,17 +55,19 @@ class Bravo7StatePublisher:
         print("Connection Found!")
 
     def pubState(self):
-        #self.b7statePub.publish(self.bravo7state)
-        try:
-            self.pos_socket.send(np.array(self.bravo7state.pose))
-            self.pos_socket.send(np.array(self.bravo7state.vel))
-            self.pos_socket.send(np.array(self.bravo7state.q))
-            self.pos_socket.send(np.array(self.bravo7state.dq))
-            self.pos_socket.send(np.array(self.bravo7state.force))
-            self.pos_socket.send(np.array(self.bravo7state.torque))
-        except Exception as e:
-            print(e)
-            self.lookToConnect()
+        if self.use_server:
+            self.b7statePub.publish(self.bravo7state)
+        else:
+            try:
+                self.pos_socket.send(np.array(self.bravo7state.pose))
+                self.pos_socket.send(np.array(self.bravo7state.vel))
+                self.pos_socket.send(np.array(self.bravo7state.q))
+                self.pos_socket.send(np.array(self.bravo7state.dq))
+                self.pos_socket.send(np.array(self.bravo7state.force))
+                self.pos_socket.send(np.array(self.bravo7state.torque))
+            except Exception as e:
+                print(e)
+                self.lookToConnect()
 
 
     def ee_callback(self, msg):

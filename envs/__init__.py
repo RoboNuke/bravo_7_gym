@@ -1,1 +1,1 @@
-from bravo_7_gym.envs.bravo7_env import Bravo7Env, DefaultEnvConfig
+from bravo_7_gym.envs.bravo7_env_client import Bravo7Env, DefaultEnvConfig

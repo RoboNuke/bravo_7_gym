@@ -13,6 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   message_generation
   sensor_msgs
+  motion_primitives
 )
 
 ## System dependencies are found with CMake's conventions
@@ -165,6 +166,7 @@ include_directories(
 catkin_install_python(PROGRAMS
    utils/bravo_7_state_pub_node.py
    utils/cmd_socket_publisher.py
+   scripts/bravo_server.py
    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

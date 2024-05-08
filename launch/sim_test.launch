@@ -12,19 +12,23 @@
 
     <include file="$(find bravo_controllers)/launch/compliance_controller.launch"/>
 
-    <group ns="actor">
+    <!--group ns="actor">
         <include file="$(find bravo_7_gym)/launch/socket_nodes.launch">
             <arg name="state_port" value="53269"/>
             <arg name="command_port" value="65432"/>
         </include>
-    </group>
-
-    <!--group ns="eval">
-        <include file="$(find bravo_7_gym)/launch/socket_nodes.launch">
-            <arg name="state_port" value="55269"/>
-            <arg name="command_port" value="65000"/>
-        </include>
     </group-->
+    
+    <node name="eval_state_node" pkg="bravo_7_gym" type="bravo_7_state_pub_node.py" 
+        launch-prefix="xterm -hold -e"
+    />
+
+    <node name="bravo_server" 
+        pkg="bravo_7_gym" 
+        type="bravo_server.py" 
+        ns="bravo" 
+        launch-prefix="xterm -hold -e"
+    />
 
 
 

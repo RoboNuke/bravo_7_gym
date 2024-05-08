@@ -3,7 +3,7 @@ import numpy as np
 import gymnasium as gym
 from scipy.spatial.transform import Rotation
 import cv2
-
+import requests
 import time
 import copy
 from typing import Dict
@@ -16,11 +16,6 @@ from bravo_7_gym.utils.rotations import euler_2_quat, quat_2_euler
 from pyquaternion import Quaternion
 from bravo_7_gym.camera.rs_capture import RSCapture
 from bravo_7_gym.camera.video_capture import VideoCapture
-
-#import rospy
-#from std_msgs.msg import Float64MultiArray
-#from geometry_msgs.msg import PoseStamped
-#from bravo_7_gym.msg import Bravo7State
 
 from mlsocket import MLSocket
 import threading
@@ -53,51 +48,34 @@ class DefaultEnvConfig:
         "wrist_1": "130322274175",
         "wrist_2": "127122270572",
     }
-    #TARGET_POSE: np.ndarray = np.zeros((6,))
-    #TARGET_POSE: np.ndarray = np.array([0.437, -0.053, 0.278, -3.127, 0.365, -1.421])
     TARGET_POSE: np.ndarray = np.array([0.436699, -0.05278, 0.27785, 0.74634, 0.64014, 0.14252, 0.11355])
-    #REWARD_THRESHOLD: np.ndarray = np.zeros((6,))
     REWARD_THRESHOLD: np.ndarray = np.array([0.001, 0.001, 0.001, 0.1]) # x, y, z, angle
-    #ACTION_SCALE = np.zeros((3,))
     ACTION_SCALE = np.ones((3,))
-    #RESET_POSE = np.zeros((6,))
-    #RESET_POSE = np.array([0.232, 0.0, 0.547, 0.0, -0.01, -0.511])
     RESET_POSE = np.array([0.5494, 0.0033, 0.4362, -0.1519, 0.4307, -0.2859, 0.8424])
     RANDOM_RESET = False
     RANDOM_XY_RANGE = 0.0
     RANDOM_RZ_RANGE = 0.0
-    #ABS_POSE_LIMIT_HIGH = np.zeros((6,))
     ABS_POSE_LIMIT_HIGH = np.array([1.0, 0.5, 0.65, 3.14, 3.14, 3.14])
-    #ABS_POSE_LIMIT_LOW = np.zeros((6,))
     ABS_POSE_LIMIT_LOW = np.array([0.15, -0.5, 0.01, -3.14, -3.14, -3.14])
-    EE_FRAME = "ee_link"
     USE_CAMERAS = False
     USE_FT_SENSOR = False
-    CMD_PORT = 65432
-    EVAL_CMD_PORT = 65000
-    POS_PORT = 53269
-    EVAL_POS_PORT = 55269
-    HOST = "127.0.0.1"
+    SERVER_URL: str = "http://127.0.0.1:5000/"
 
 class Bravo7Env(gym.Env):
     def __init__(
             self,
-            kwargs, # "actor", "learner", "eval"
             hz=10,
             save_video = False,
             #config:DefaultEnvConfig = None,
             config  = DefaultEnvConfig(),
             max_episode_length=100):
-        print("In env init")
-        self.env_type = kwargs
-        print(self.env_type)
         self.action_scale = config.ACTION_SCALE
         self._TARGET_POSE = config.TARGET_POSE
         self._REWARD_THRESHOLD = config.REWARD_THRESHOLD
         self.config = config
         self.max_episode_length = max_episode_length
+        self.url = self.config.SERVER_URL
 
-        self.ee_frame = config.EE_FRAME
         # convert last 3 elements from euler to quat, from size (6,) to (7,)
         if len(config.RESET_POSE) == 6:
             self.resetpos = np.concatenate(
@@ -105,11 +83,11 @@ class Bravo7Env(gym.Env):
             )
         else:
             self.resetpos = config.RESET_POSE
-        #self.stateHolder = Bravo7State()
+        
         self.currpos = self.resetpos.copy()
         self.currvel = np.zeros((6,))
-        self.q = np.zeros((7,))
-        self.dq = np.zeros((7,))
+        self.q = np.zeros((6,))
+        self.dq = np.zeros((6,))
         self.currforce = np.zeros((3,))
         self.currtorque = np.zeros((3,))
 
@@ -173,56 +151,12 @@ class Bravo7Env(gym.Env):
             self.img_queue = queue.Queue()
             self.displayer = ImageDisplayer(self.img_queue)
             self.displayer.start()
-        #self.b7CC_pub = rospy.Publisher(config.BRAVO_7_CC_TOPIC, Float64MultiArray, queue_size=1)
-        #self.b7state_sub = rospy.Subscriber(config.BRAVO_7_STATE_TOPIC, Bravo7State, self.stateCB)
-
-        #pos_socket = MLSocket().connect((config.HOST, config.POS_PORT))
-        if not self.env_type == "learner":
-            self.cmd_socket = MLSocket()
-            self.lookToConnect()
-            self.posThread = threading.Thread(target=self.posCB)
-            self.posThread.start()
 
         print("Initialized Bravo 7 Env")
-
-    #def stateCB(self, msg):
-    #    self.stateHolder = msg
-    def lookToConnect(self):
-        connected = False
-        print(f"{self.env_type}:Connecting on cmd socket")
-        while not connected:
-            try:
-                if self.env_type == "actor":
-                    self.cmd_socket.connect((self.config.HOST, self.config.CMD_PORT))
-                else:
-                    self.cmd_socket.connect((self.config.HOST, self.config.EVAL_CMD_PORT))
-                connected = True
-            except Exception as e:
-                pass
-        print(f"{self.env_type}:Printed to cmd socket")
-
-    def posCB(self):
-        with MLSocket() as s:
-            if self.env_type == "actor":
-                s.bind((self.config.HOST, self.config.POS_PORT))
-            elif self.env_type == "eval":
-                s.bind((self.config.HOST, self.config.EVAL_POS_PORT))
-            s.listen()
-            conn, address = s.accept()
-            print(f"{self.env_type}:Connected by ", address)
-            with conn:
-                while True:
-                    self.currpos = np.float32(conn.recv(1024))
-                    self.currvel = np.float32(conn.recv(1024))
-                    self.q = np.float32(conn.recv(1024))
-                    self.dq = np.float32(conn.recv(1024))
-                    self.currforce = np.float32(conn.recv(1024))
-                    self.currtorque = np.float32(conn.recv(1024))
 
 
     def step(self, action: np.ndarray) -> tuple:
         """standard gym step function."""
-        print("Action:", action)
         start_time = time.time()
         action = np.clip(action, self.action_space.low, self.action_space.high)
         xyz_delta = action[:3]
@@ -235,7 +169,7 @@ class Bravo7Env(gym.Env):
             Rotation.from_euler("xyz", action[3:6] * self.action_scale[1])
             * Rotation.from_quat(self.currpos[3:])
         ).as_quat()
-        #print("Next cmd:", self.nextpos, self.clip_safety_box(self.nextpos))
+        
         self._send_pos_command(self.clip_safety_box(self.nextpos))
 
         self.curr_path_length += 1
@@ -250,13 +184,6 @@ class Bravo7Env(gym.Env):
     
     def compute_reward(self, obs) -> bool:
         current_pose = obs["state"]["tcp_pose"]
-        """
-        # convert from quat to euler first
-        euler_angles = quat_2_euler(current_pose[3:])
-        euler_angles = np.abs(euler_angles)
-        current_pose = np.hstack([current_pose[:3], euler_angles])
-        delta = np.abs(current_pose - self._TARGET_POSE)
-        """
         # get quaternion distance
         q_cur = self.pos2Quat(current_pose)
         q_goal = self.pos2Quat(self._TARGET_POSE)
@@ -271,36 +198,30 @@ class Bravo7Env(gym.Env):
             # print(f'Goal not reached, the difference is {delta}, the desired threshold is {_REWARD_THRESHOLD}')
             return False
         
-
     def pos2Quat(self, pos):
         return Quaternion(pos[6], pos[3], pos[4], pos[5])
+    
     def _send_pos_command(self, pos: np.ndarray):
-        # publish to command pose topic
-        #cmd = Float64MultiArray()
-        #cmd.data = pos
-        #self.b7CC_pub.publish(cmd)
-        try:
-            self.cmd_socket.send(pos)
-        except Exception as e:
-            print(e)
-            self.lookToConnect()
+        # pose pose command
+        arr = np.array(pos).astype(np.float32)
+        data = {"arr":arr.tolist()}
+        requests.post(self.url + "pose", json=data)
 
     def _update_currpos(self):
         """
         Internal functions to update state information from
         the robot, gripper and force-torque sensor
         """
-        """sh = self.stateHolder.copy() # copy should prevent overright issues?
-        self.q[:] = sh.q
-        self.dq[:] = sh.dq
+        ps = requests.post(self.url + "getstate", json={})
+        ps = ps.json()
+        self.currpos[:] = np.array(ps["pose"], dtype="float32")
+        self.currvel[:] = np.array(ps["vel"], dtype="float32")
 
-        self.currpos[:] = sh.pose
-        self.currvel[:] = sh.vel
+        self.currforce[:] = np.array(ps["force"], dtype="float32")
+        self.currtorque[:] = np.array(ps["torque"], dtype="float32")
 
-        self.currforce[:] = sh.force
-        self.currtorque[:] = sh.torque
-        """
-        return
+        self.q[:] = np.array(ps["q"], dtype="float32")
+        self.dq[:] = np.array(ps["dq"], dtype="float32")
 
     def _get_obs(self) -> dict:
         if self.config.USE_FT_SENSOR:
@@ -323,13 +244,15 @@ class Bravo7Env(gym.Env):
             return copy.deepcopy(dict(state=state_obs))
 
     def reset(self, **kwargs):
-        print("RESETING")
+        #print("RESETING")
+
         self.go_to_rest()
         self.curr_path_length = 0
 
+
         self._update_currpos()
         obs = self._get_obs()
-        print("RESET")
+        #print("RESET")
         return obs, {}
 
     def go_to_rest(self):
@@ -338,6 +261,7 @@ class Bravo7Env(gym.Env):
         implemented each subclass for the specific task.
         Should override this method if custom reset procedure is needed.
         """
+        requests.post(self.url + "stopCC")
         time.sleep(0.5)
 
         # Perform Carteasian reset
@@ -351,20 +275,14 @@ class Bravo7Env(gym.Env):
                 -self.random_rz_range, self.random_rz_range
             )
             reset_pose[3:] = euler_2_quat(euler_random)
-            self.interpolate_move(reset_pose, timeout=1.5)
+            self._send_pos_command(reset_pose)
         else:
             reset_pose = self.resetpos.copy()
-            self.interpolate_move(reset_pose, timeout=10.0)
+            self._send_pos_command(reset_pose)
 
-    def interpolate_move(self, goal: np.ndarray, timeout: float):
-        """Move the robot to the goal position with linear interpolation."""
-        steps = int(timeout * self.hz)
-        self._update_currpos()
-        path = np.linspace(self.currpos, goal, steps)
-        for p in path:
-            self._send_pos_command(p)
-            time.sleep(1 / self.hz)
-        self._update_currpos()
+        time.sleep(0.5)
+        requests.post(self.url + "startCC")
+        time.sleep(0.5)
 
     def clip_safety_box(self, pose: np.ndarray) -> np.ndarray:
         """Clip the pose to be within the safety box."""
@@ -463,17 +381,5 @@ class Bravo7Env(gym.Env):
         except Exception as e:
             print(f"Failed to close cameras: {e}")
 
-    """
-    def np_to_poseStamped(self, pos: np.ndarray, frame="ee_link"):
-        ps = PoseStamped()
-        ps.header.frame_id = frame
-        ps.pose.position.x = pos[0]
-        ps.pose.position.y = pos[1]
-        ps.pose.position.z = pos[2]
-        ps.pose.orientation.x = pos[3]
-        ps.pose.orientation.y = pos[4]
-        ps.pose.orientation.z = pos[5]
-        ps.pose.orientation.w = pos[6]
-        return ps
-    """
+
 
