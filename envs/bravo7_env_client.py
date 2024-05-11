@@ -49,7 +49,7 @@ class DefaultEnvConfig:
         "wrist_2": "127122270572",
     }
     TARGET_POSE: np.ndarray = np.array([0.436699, -0.05278, 0.27785, 0.74634, 0.64014, 0.14252, 0.11355])
-    REWARD_THRESHOLD: np.ndarray = np.array([0.001, 0.001, 0.001, 0.1]) # x, y, z, angle
+    REWARD_THRESHOLD: np.ndarray = np.array([0.005, 0.005, 0.005, 0.1]) # x, y, z, angle
     ACTION_SCALE = np.ones((3,))
     RESET_POSE = np.array([0.5494, 0.0033, 0.4362, -0.1519, 0.4307, -0.2859, 0.8424])
     RANDOM_RESET = False
@@ -163,13 +163,11 @@ class Bravo7Env(gym.Env):
 
         self.nextpos = self.currpos.copy()
         self.nextpos[:3] = self.nextpos[:3] + xyz_delta * self.action_scale[0]
-
         # GET ORIENTATION FROM ACTION
         self.nextpos[3:] = (
-            Rotation.from_euler("xyz", action[3:6] * self.action_scale[1])
-            * Rotation.from_quat(self.currpos[3:])
+            Rotation.from_euler("xyz", action[3:6] * self.action_scale[1])*
+            Rotation.from_quat(self.currpos[3:]) 
         ).as_quat()
-        
         self._send_pos_command(self.clip_safety_box(self.nextpos))
 
         self.curr_path_length += 1
@@ -203,7 +201,8 @@ class Bravo7Env(gym.Env):
     
     def _send_pos_command(self, pos: np.ndarray):
         # pose pose command
-        arr = np.array(pos).astype(np.float32)
+        #print("Sending:", pos)
+        arr = np.array(pos).astype(np.float64)
         data = {"arr":arr.tolist()}
         requests.post(self.url + "pose", json=data)
 
@@ -226,15 +225,15 @@ class Bravo7Env(gym.Env):
     def _get_obs(self) -> dict:
         if self.config.USE_FT_SENSOR:
             state_obs = {
-                "tcp_pose": self.currpos,
-                "tcp_vel": self.currvel,
-                "tcp_force": self.currforce,
-                "tcp_torque": self.currtorque, 
+                "tcp_pose": self.currpos.astype("float32"),
+                "tcp_vel": self.currvel.astype("float32"),
+                "tcp_force": self.currforce.astype("float32"),
+                "tcp_torque": self.currtorque.astype("float32"), 
             }
         else:
             state_obs = {
-                "tcp_pose": self.currpos,
-                "tcp_vel": self.currvel,
+                "tcp_pose": self.currpos.astype("float32"),
+                "tcp_vel": self.currvel.astype("float32"),
             }
 
         if self.config.USE_CAMERAS:

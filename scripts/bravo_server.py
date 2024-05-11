@@ -8,6 +8,8 @@ from std_msgs.msg import Float64MultiArray
 #from geometry_msgs.msg import PoseStamped
 from bravo_7_gym.msg import Bravo7State
 from motion_primitives.motion import Mover
+import rospy
+from bravo_controllers.srv import StartPlayback
 
 FLAGS = flags.FLAGS
 
@@ -84,6 +86,9 @@ class BravoServer:
             self.pubCC(pose)
         else:
             self.moveToPose(pose)
+    
+    def moveToNamedState(self, name, wait, rest):
+        self.robot.go_named_group_state(name, wait, rest)
 
 def main(_):
     ROBOT_IP = FLAGS.robot_ip
@@ -126,6 +131,35 @@ def main(_):
         print("Moving to", pos)
         robot_server.setPoseGoal(pos)
         return "Moved"
+    
+    @webapp.route("/toNamedPose", methods=["POST"])
+    def toNamedPose():
+        name = str(request.json['name'])
+        wait = bool(request.json['wait'])
+        retry = bool(request.json['retry'])
+        print(wait)
+        print(retry)
+        print("Moving to ", name, len(name))
+        robot_server.moveToNamedState(name, wait, retry)
+        print("finished")
+        return "Moved to " + name
+    
+    @webapp.route("/loadTraj", methods=["POST"])
+    def getLoadedPath():
+        filepath = str(request.json['filepath'])
+        dt = float(request.json['dt'])
+        steps = int(request.json['steps'])
+        playback = bool(request.json['playback'])
+
+        print("Waiting for playback_ee_trajectory service...")
+        rospy.wait_for_service('/playback_ee_trajectory')
+        print("\t Got it!")
+        serv = rospy.ServiceProxy('/playback_ee_trajectory', StartPlayback)
+        print("Got serv")
+        res = serv(filepath, dt, steps, playback)
+        print("Successful:", res.success)
+        if res.success:
+            return jsonify({"traj":res.traj.data})
 
     webapp.run(host="127.0.0.1")
 if __name__=="__main__":
