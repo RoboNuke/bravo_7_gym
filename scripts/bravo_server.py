@@ -2,13 +2,15 @@ from flask import Flask, request, jsonify
 import numpy as np
 from absl import app, flags
 import time
+import copy
+
 import rospy
-from std_srvs.srv import SetBool, SetBoolRequest, SetBoolResponse
+from std_srvs.srv import SetBool
 from std_msgs.msg import Float64MultiArray
-#from geometry_msgs.msg import PoseStamped
+from rsa_bravo_msgs.srv import TareForceTorque
+from geometry_msgs.msg import PoseStamped
 from bravo_7_gym.msg import Bravo7State
 from motion_primitives.motion import Mover
-import rospy
 from bravo_controllers.srv import StartPlayback
 
 FLAGS = flags.FLAGS
@@ -31,6 +33,8 @@ class BravoServer:
         self.cc_cmd_topic = rospy.get_param("compliance_controller/cc_cmd_topic", "/bravo/compliance_controller/command")
         self.toggle_cc_topic = rospy.get_param("compliance_controller/toggle_cc_service_topic", "toggle_compliance_controller")
 
+        self.ee_frame = rospy.get_param("compliance_controller/ee_frame", "ee_frame")
+        self.world_frame = rospy.get_param("compliance_controller/world_frame", "bravo_base_link")
         # impedance service func
         rospy.wait_for_service(self.toggle_cc_topic)
         self.toggle_cc_srv = rospy.ServiceProxy(self.toggle_cc_topic, SetBool)
@@ -79,7 +83,18 @@ class BravoServer:
 
     def moveToPose(self, pose):
         """ Moves the robot to specified pose using moveit """
-        self.robot.go_named_group_state("rest")
+        #self.robot.go_named_group_state("rest")
+        print("Reset Pose:", pose)
+        PS = PoseStamped()
+        PS.header.frame_id = self.world_frame
+        PS.pose.position.x = pose[0]
+        PS.pose.position.y = pose[1]
+        PS.pose.position.z = pose[2]
+        PS.pose.orientation.x = pose[3]
+        PS.pose.orientation.y = pose[4]
+        PS.pose.orientation.z = pose[5]
+        PS.pose.orientation.w = pose[6]
+        self.robot.go_ee_pose(pose = PS, wait = True)
 
     def setPoseGoal(self, pose):
         if self.cc_activated:
@@ -89,6 +104,23 @@ class BravoServer:
     
     def moveToNamedState(self, name, wait, rest):
         self.robot.go_named_group_state(name, wait, rest)
+
+    def tareFTSensor(self):
+        """ Moves to home position, tares ft sensor to zero, moves back to previous position """
+        curPos = copy.deepcopy(self.pose)
+        self.robot.go_named_group_state("home", wait=True, retry = True)
+        print("Waiting for ft tare service...")
+        rospy.wait_for_service('/bravo/tare_ft_sensor')
+        print("\t Got it!")
+        serv = rospy.ServiceProxy('/bravo/tare_ft_sensor', TareForceTorque)
+        print("\tGot serv")
+        res = serv(np.zeros((6,)))
+        if res.success:
+            print("\tSuccessfully tared ft sensor")
+        else:
+            print("\tFT Sensor Tare Failed")
+        self.moveToPose(curPos)
+        return res.success
 
 def main(_):
     ROBOT_IP = FLAGS.robot_ip
@@ -128,7 +160,7 @@ def main(_):
     @webapp.route("/pose", methods=["POST"])
     def pose():
         pos = np.array(request.json["arr"])
-        print("Moving to", pos)
+        #print("Moving to", pos)
         robot_server.setPoseGoal(pos)
         return "Moved"
     
@@ -160,8 +192,18 @@ def main(_):
         print("Successful:", res.success)
         if res.success:
             return jsonify({"traj":res.traj.data})
+        
+    @webapp.route("/tareFTSensor", methods=["POST"])
+    def tareFTSensor():
+        print("Starting tare")
+        try:
+            robot_server.tareFTSensor()
+        except Exception as e:
+            print(e)
+        return "Tared FT Sensor"
 
-    webapp.run(host="127.0.0.1")
+    webapp.run(host=ROBOT_IP)
+
 if __name__=="__main__":
     print("Starting App")
     app.run(main)
