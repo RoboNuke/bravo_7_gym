@@ -12,6 +12,7 @@ from collections import OrderedDict
 import threading
 import queue
 
+from scipy.spatial.transform import Rotation as R
 from bravo_7_gym.utils.rotations import euler_2_quat, quat_2_euler
 from pyquaternion import Quaternion
 from bravo_7_gym.camera.rs_capture import RSCapture
@@ -45,28 +46,34 @@ class ImageDisplayer(threading.Thread):
 class DefaultEnvConfig:
     """ Default Configurations for Bravo7 env. """
     REALSENSE_CAMERAS: Dict = {
-        "wrist_1": "130322274175",
-        "wrist_2": "127122270572",
+        "wrist": "913422070891",
+        "world": "913422070922",
     }
     TARGET_POSE: np.ndarray = np.array([0.436699, -0.05278, 0.27785, 0.74634, 0.64014, 0.14252, 0.11355])
     REWARD_THRESHOLD: np.ndarray = np.array([0.005, 0.005, 0.005, 0.1]) # x, y, z, angle
     ACTION_SCALE = np.ones((3,))
     RESET_POSE = np.array([0.5494, 0.0033, 0.4362, -0.1519, 0.4307, -0.2859, 0.8424])
     RANDOM_RESET = False
-    RANDOM_XY_RANGE = 0.0
-    RANDOM_RZ_RANGE = 0.0
+    RANDOM_X_RANGE = 0.015
+    RANDOM_Y_RANGE = 0.015
+    RANDOM_Z_RANGE = 0.00
+    RANDOM_RX_RANGE = 0.00
+    RANDOM_RY_RANGE = 0.00
+    RANDOM_RZ_RANGE = 0.01
     ABS_POSE_LIMIT_HIGH = np.array([1.0, 0.5, 0.65, 3.14, 3.14, 3.14])
     ABS_POSE_LIMIT_LOW = np.array([0.15, -0.5, 0.01, -3.14, -3.14, -3.14])
     USE_CAMERAS = False
     USE_FT_SENSOR = False
+    FT_TARE_FREQ = 90 # ~20 sec per episode => 30 min to tare ft sensor
     SERVER_URL: str = "http://127.0.0.1:5000/"
+    SAVE_VIDEO = True
+    SAVE_PATH: str = "obs/"
 
 class Bravo7Env(gym.Env):
     def __init__(
             self,
             hz=10,
-            save_video = False,
-            #config:DefaultEnvConfig = None,
+            fake_env=False,
             config  = DefaultEnvConfig(),
             max_episode_length=100):
         self.action_scale = config.ACTION_SCALE
@@ -93,13 +100,12 @@ class Bravo7Env(gym.Env):
 
         self.lastsent = time.time()
         self.randomreset = config.RANDOM_RESET
-        self.random_xy_range = config.RANDOM_XY_RANGE
-        self.random_rz_range = config.RANDOM_RZ_RANGE
         self.hz = hz
-        if save_video:
-            print("Saving videos!")
-        self.save_video = save_video
+        self.save_video = config.SAVE_VIDEO
         self.recording_frames = []
+        self.save_path = config.SAVE_PATH
+        if config.SAVE_VIDEO:
+            print("Saving videos at: " + self.save_path)
 
         # boundary box
         self.xyz_bounding_box = gym.spaces.Box(
@@ -131,27 +137,28 @@ class Bravo7Env(gym.Env):
             }
         )
         if config.USE_FT_SENSOR:
+            self.ft_cycles = 0
             self.observation_space["state"]["tcp_force"] = gym.spaces.Box(-np.inf, np.inf, shape=(3,))
             self.observation_space["state"]["tcp_torque"] = gym.spaces.Box(-np.inf, np.inf, shape=(3,))
 
         if config.USE_CAMERAS:
             self.observation_space["images"] = gym.spaces.Dict(
                 {
-                    "wrist_1": gym.spaces.Box(
+                    "wrist": gym.spaces.Box(
                         0, 255, shape=(128, 128, 3), dtype=np.uint8
                     ),
-                    "wrist_2": gym.spaces.Box(
+                    "world": gym.spaces.Box(
                         0, 255, shape=(128, 128, 3), dtype=np.uint8
                     ),
                 }
             )
-
+            if fake_env:
+                return
             self.cap = None
             self.init_cameras(config.REALSENSE_CAMERAS)
             self.img_queue = queue.Queue()
             self.displayer = ImageDisplayer(self.img_queue)
             self.displayer.start()
-
         print("Initialized Bravo 7 Env")
 
 
@@ -178,7 +185,10 @@ class Bravo7Env(gym.Env):
         ob = self._get_obs()
         reward = self.compute_reward(ob)
         done = self.curr_path_length >= self.max_episode_length or reward
-        return ob, int(reward), done, False, {}
+
+        info = {}
+        info['found_goal'] = reward
+        return ob, int(reward), done, False, info
     
     def compute_reward(self, obs) -> bool:
         current_pose = obs["state"]["tcp_pose"]
@@ -238,22 +248,38 @@ class Bravo7Env(gym.Env):
 
         if self.config.USE_CAMERAS:
             images = self.get_im()
+
             return copy.deepcopy(dict(images=images, state=state_obs))
         else:
             return copy.deepcopy(dict(state=state_obs))
 
     def reset(self, **kwargs):
         #print("RESETING")
+        if self.save_video:
+            self.save_video_recording()
 
         self.go_to_rest()
         self.curr_path_length = 0
 
-
+        if self.config.USE_FT_SENSOR:
+            # tare ft sensor every so often 
+            self.ft_cycles += 1
+            if self.ft_cycles == self.config.FT_TARE_FREQ:
+                self.ft_cycles = 0
+                requests.post(self.url + "stopCC")
+                time.sleep(0.5)
+                requests.post(self.url + "tareFTSensor")
+                requests.post(self.url + "startCC")
+                time.sleep(0.5)
+        
         self._update_currpos()
         obs = self._get_obs()
+
         #print("RESET")
         return obs, {}
 
+    def getRand(self, r):
+        return np.random.uniform(-r, r)
     def go_to_rest(self):
         """
         The concrete steps to perform reset should be
@@ -263,17 +289,19 @@ class Bravo7Env(gym.Env):
         requests.post(self.url + "stopCC")
         time.sleep(0.5)
 
+        requests.post(self.url + "toNamedPose", data={"name":"rest", "wait":True, "retry":True})
         # Perform Carteasian reset
         if self.randomreset:  # randomize reset position in xy plane
             reset_pose = self.resetpos.copy()
-            reset_pose[:2] += np.random.uniform(
-                -self.random_xy_range, self.random_xy_range, (2,)
-            )
-            euler_random = self._TARGET_POSE[3:].copy()
-            euler_random[-1] += np.random.uniform(
-                -self.random_rz_range, self.random_rz_range
-            )
-            reset_pose[3:] = euler_2_quat(euler_random)
+            reset_pose[0] += self.getRand(self.config.RANDOM_X_RANGE)
+            reset_pose[1] += self.getRand(self.config.RANDOM_Y_RANGE)
+            reset_pose[2] += self.getRand(self.config.RANDOM_Z_RANGE)
+
+            rR = R.from_quat(reset_pose[3:])
+            xR = R.from_euler('x', self.getRand(self.config.RANDOM_RX_RANGE))
+            yR = R.from_euler('y', self.getRand(self.config.RANDOM_RY_RANGE))
+            zR = R.from_euler('z', self.getRand(self.config.RANDOM_RZ_RANGE))
+            reset_pose[3:] = (zR * yR * xR * rR).as_quat()
             self._send_pos_command(reset_pose)
         else:
             reset_pose = self.resetpos.copy()
@@ -337,9 +365,9 @@ class Bravo7Env(gym.Env):
 
     def crop_image(self, name, image) -> np.ndarray:
         """Crop realsense images to be a square."""
-        if name == "wrist_1":
+        if name == "wrist":
             return image[:, 80:560, :]
-        elif name == "wrist_2":
+        elif name == "world":
             return image[:, 80:560, :]
         else:
             return ValueError(f"Camera {name} not recognized in cropping")
@@ -348,7 +376,7 @@ class Bravo7Env(gym.Env):
         try:
             if len(self.recording_frames):
                 video_writer = cv2.VideoWriter(
-                    f'./videos/{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.mp4',
+                    self.save_path + f'{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.mp4',
                     cv2.VideoWriter_fourcc(*"mp4v"),
                     10,
                     self.recording_frames[0].shape[:2][::-1],
@@ -379,6 +407,10 @@ class Bravo7Env(gym.Env):
                 cap.close()
         except Exception as e:
             print(f"Failed to close cameras: {e}")
+
+    def close(self):
+        self.close_cameras()
+        super().close()
 
 
 
