@@ -77,7 +77,7 @@ import cv2
 import numpy as np
 import queue
 import sys
-sys.path.insert(0, "/home/hunter/catkin_ws/src/")
+sys.path.insert(0, "/home/rsa/catkin_ws/src/")
 from bravo_7_gym.camera.rs_capture import RSCapture
 from bravo_7_gym.camera.video_capture import VideoCapture
 from collections import OrderedDict
@@ -95,7 +95,7 @@ class ImageDisplayer(threading.Thread):
 
     def run(self):
         while True:
-            print("getin array")
+            #print("getin array")
             img_array = self.queue.get()  # retrieve an image from the queue
             if img_array is None:  # None is our signal to exit
                 break
@@ -105,7 +105,7 @@ class ImageDisplayer(threading.Thread):
             )
 
             cv2.imshow("RealSense Cameras", frame)
-            print("showing img")
+            #print("showing img")
             cv2.waitKey(1)
 
 
@@ -123,6 +123,7 @@ def crop_image(name, image) -> np.ndarray:
 if __name__=="__main__":
     cap = OrderedDict()
     for cam_name, cam_serial in REALSENSE_CAMERAS.items():
+        print(cam_name, cam_serial)
         cam = VideoCapture(
             RSCapture(name=cam_name, serial_number=cam_serial, depth=False)
         )

@@ -1,0 +1,37 @@
+<launch>
+
+    <include file="$(find bravo_arm_sw)/launch/bravo_arm.launch">
+        <arg  name="use_ps4_controller" value="false"/>
+        <arg  name="with_trisect" value="false"/>
+        <arg  name="start_rviz" value="true"/>
+        <arg  name="with_base_hand" value="false"/>
+        <arg  name="with_rigid_peg" value="true"/>
+        <arg  name="peg_shape" value="circle"/>
+        <arg  name="peg_size" value="30"/>
+        <arg  name="with_moveit_servo" value="false"/>
+        <arg  name="with_camera" value="true"/>
+        <arg  name="simulated" value="false"/>
+    </include>
+
+    <include file="$(find bravo_controllers)/launch/compliance_controller.launch"/>
+
+    <!--group ns="actor">
+        <include file="$(find bravo_7_gym)/launch/socket_nodes.launch">
+            <arg name="state_port" value="53269"/>
+            <arg name="command_port" value="65432"/>
+        </include>
+    </group-->
+    
+    <node name="eval_state_node" pkg="bravo_7_gym" type="bravo_7_state_pub_node.py" 
+        launch-prefix="xterm -hold -e"
+    />
+
+    <node name="bravo_server" 
+        pkg="bravo_7_gym" 
+        type="bravo_server.py" 
+        ns="bravo" 
+        launch-prefix="xterm -hold -e"
+    />
+
+</launch>
+
