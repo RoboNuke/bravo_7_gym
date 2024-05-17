@@ -132,10 +132,10 @@ if __name__=="__main__":
     observation_space["images"] = gym.spaces.Dict(
                 {
                     "wrist": gym.spaces.Box(
-                        0, 255, shape=(128, 128, 3), dtype=np.uint8
+                        0, 255, shape=(512, 512, 3), dtype=np.uint8
                     ),
                     "world": gym.spaces.Box(
-                        0, 255, shape=(128, 128, 3), dtype=np.uint8
+                        0, 255, shape=(512, 512, 3), dtype=np.uint8
                     ),
                 }
             )

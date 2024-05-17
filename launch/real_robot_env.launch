@@ -10,7 +10,7 @@
         <arg  name="peg_size" value="30"/>
         <arg  name="with_moveit_servo" value="false"/>
         <arg  name="with_camera" value="true"/>
-        <arg  name="simulated" value="true"/>
+        <arg  name="simulated" value="false"/>
     </include>
 
     <include file="$(find bravo_controllers)/launch/compliance_controller.launch"/>
