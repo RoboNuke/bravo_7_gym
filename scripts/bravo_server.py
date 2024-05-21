@@ -46,6 +46,7 @@ class BravoServer:
         self.b7CC_pub = rospy.Publisher(self.cc_cmd_topic, Float64MultiArray, queue_size=1)
 
         self.pose = np.zeros((7,))
+        print("Servo Obj init")
         
     def _stateCB(self, msg):
         self.pose = msg.pose
@@ -124,7 +125,7 @@ class BravoServer:
 
 def main(_):
     ROBOT_IP = FLAGS.robot_ip
-    
+    print("ROBOT_IP:", ROBOT_IP)
     webapp = Flask(__name__)
 
     rospy.init_node("bravo_7_control_server")
@@ -132,6 +133,7 @@ def main(_):
         robot_ip=ROBOT_IP
     )
 
+    print("ROS Init")
     @webapp.route("/startCC", methods=["POST"])
     def start_CC():
         print("Starting compliance controller")
@@ -202,7 +204,9 @@ def main(_):
             print(e)
         return "Tared FT Sensor"
 
+    print("Functs init")
     webapp.run(host=ROBOT_IP)
+    print("Webapp running")
 
 if __name__=="__main__":
     print("Starting App")
