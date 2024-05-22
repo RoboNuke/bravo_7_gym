@@ -81,6 +81,7 @@ class BravoServer:
         msg = Float64MultiArray()
         msg.data = pose_cmd
         self.b7CC_pub.publish(msg)
+        return True
 
     def moveToPose(self, pose):
         """ Moves the robot to specified pose using moveit """
@@ -95,16 +96,18 @@ class BravoServer:
         PS.pose.orientation.y = pose[4]
         PS.pose.orientation.z = pose[5]
         PS.pose.orientation.w = pose[6]
-        self.robot.go_ee_pose(pose = PS, wait = True)
+        success = self.robot.go_ee_pose(pose = PS, wait = True)
+        return success
 
     def setPoseGoal(self, pose):
         if self.cc_activated:
-            self.pubCC(pose)
+            return self.pubCC(pose)
         else:
-            self.moveToPose(pose)
+            return self.moveToPose(pose)
     
-    def moveToNamedState(self, name, wait, rest):
-        self.robot.go_named_group_state(name, wait, rest)
+    def moveToNamedState(self, name, wait):
+        success = self.robot.go_named_group_state(name, wait)
+        return success
 
     def tareFTSensor(self):
         """ Moves to home position, tares ft sensor to zero, moves back to previous position """
@@ -162,21 +165,18 @@ def main(_):
     @webapp.route("/pose", methods=["POST"])
     def pose():
         pos = np.array(request.json["arr"])
-        #print("Moving to", pos)
-        robot_server.setPoseGoal(pos)
-        return "Moved"
+        success = robot_server.setPoseGoal(pos)
+        return jsonify({"success": success})
     
     @webapp.route("/toNamedPose", methods=["POST"])
     def toNamedPose():
         name = str(request.json['name'])
         wait = bool(request.json['wait'])
-        retry = bool(request.json['retry'])
-        print(wait)
-        print(retry)
         print("Moving to ", name, len(name))
-        robot_server.moveToNamedState(name, wait, retry)
-        print("finished")
-        return "Moved to " + name
+        success = robot_server.moveToNamedState(name, wait)
+
+        print("Robot " + "has" if success else "has not" + " moved to " + name)
+        return jsonify({"success": success})
     
     @webapp.route("/loadTraj", methods=["POST"])
     def getLoadedPath():

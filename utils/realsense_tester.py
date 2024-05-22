@@ -77,7 +77,7 @@ import cv2
 import numpy as np
 import queue
 import sys
-sys.path.insert(0, "/home/rsa/catkin_ws/src/")
+sys.path.insert(0, "/home/hunter/catkin_ws/src/")
 from bravo_7_gym.camera.rs_capture import RSCapture
 from bravo_7_gym.camera.video_capture import VideoCapture
 from collections import OrderedDict

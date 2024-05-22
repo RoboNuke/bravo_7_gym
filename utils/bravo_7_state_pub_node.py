@@ -14,6 +14,7 @@ class Bravo7StatePublisher:
     def __init__(self):
 
         self.ee_link_name = rospy.get_param("ee_link", "ee_link")
+        print("EE link name:", self.ee_link_name)
         self.world_frame = rospy.get_param("world_frame", "bravo_base_link")
         self.dt = rospy.get_param("dt",0.001)
 

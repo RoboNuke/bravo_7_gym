@@ -214,7 +214,9 @@ class Bravo7Env(gym.Env):
         #print("Sending:", pos)
         arr = np.array(pos).astype(np.float64)
         data = {"arr":arr.tolist()}
-        requests.post(self.url + "pose", json=data)
+        ps = (requests.post(self.url + "pose", json=data)).json()
+        return ps['success']
+
 
     def _update_currpos(self):
         """
@@ -289,25 +291,28 @@ class Bravo7Env(gym.Env):
         requests.post(self.url + "stopCC")
         time.sleep(0.5)
 
-        requests.post(self.url + "toNamedPose", data={"name":"rest", "wait":True, "retry":True})
+        #requests.post(self.url + "toNamedPose", data={"name":"rest", "wait":True, "retry":True})
         # Perform Carteasian reset
-        if self.randomreset:  # randomize reset position in xy plane
-            reset_pose = self.resetpos.copy()
-            reset_pose[0] += self.getRand(self.config.RANDOM_X_RANGE)
-            reset_pose[1] += self.getRand(self.config.RANDOM_Y_RANGE)
-            reset_pose[2] += self.getRand(self.config.RANDOM_Z_RANGE)
+        succ = False
+        while not succ:
+            if self.randomreset:  # randomize reset position in xy plane
+                reset_pose = self.resetpos.copy()
+                reset_pose[0] += self.getRand(self.config.RANDOM_X_RANGE)
+                reset_pose[1] += self.getRand(self.config.RANDOM_Y_RANGE)
+                reset_pose[2] += self.getRand(self.config.RANDOM_Z_RANGE)
 
-            rR = R.from_quat(reset_pose[3:])
-            xR = R.from_euler('x', self.getRand(self.config.RANDOM_RX_RANGE))
-            yR = R.from_euler('y', self.getRand(self.config.RANDOM_RY_RANGE))
-            zR = R.from_euler('z', self.getRand(self.config.RANDOM_RZ_RANGE))
-            reset_pose[3:] = (zR * yR * xR * rR).as_quat()
-            self._send_pos_command(reset_pose)
-        else:
-            reset_pose = self.resetpos.copy()
-            self._send_pos_command(reset_pose)
+                rR = R.from_quat(reset_pose[3:])
+                xR = R.from_euler('x', self.getRand(self.config.RANDOM_RX_RANGE))
+                yR = R.from_euler('y', self.getRand(self.config.RANDOM_RY_RANGE))
+                zR = R.from_euler('z', self.getRand(self.config.RANDOM_RZ_RANGE))
+                reset_pose[3:] = (zR * yR * xR * rR).as_quat()
+                succ = self._send_pos_command(reset_pose)
 
-        time.sleep(0.5)
+            else:
+                reset_pose = self.resetpos.copy()
+                succ = self._send_pos_command(reset_pose)
+
+            time.sleep(0.5)
         requests.post(self.url + "startCC")
         time.sleep(0.5)
 

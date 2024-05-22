@@ -22,9 +22,9 @@
         </include>
     </group-->
     
-    <node name="eval_state_node" pkg="bravo_7_gym" type="bravo_7_state_pub_node.py" 
+    <!--node name="eval_state_node" pkg="bravo_7_gym" type="bravo_7_state_pub_node.py" 
         launch-prefix="xterm -hold -e"
-    />
+    /-->
 
     <node name="bravo_server" 
         pkg="bravo_7_gym" 
