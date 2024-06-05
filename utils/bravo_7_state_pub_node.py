@@ -13,13 +13,13 @@ from mlsocket import MLSocket
 class Bravo7StatePublisher:
     def __init__(self):
 
-        self.ee_link_name = rospy.get_param("ee_link", "ee_link")
+        self.ee_link_name = rospy.get_param("ee_link", "bravo_peg_link")
         print("EE link name:", self.ee_link_name)
         self.world_frame = rospy.get_param("world_frame", "bravo_base_link")
         self.dt = rospy.get_param("dt",0.001)
 
         self.joint_topic = rospy.get_param("joint_topic", "/bravo/joint_states")
-        self.ft_topic = rospy.get_param("ft_sensor_topic", "/bravo/filtered_force_torque")
+        self.ft_topic = rospy.get_param("ft_sensor_topic", "/bravo/raw_force_torque")
         self.ee_topic = rospy.get_param("ee_state_topic", "/bravo/ee_state")
         self.use_server = rospy.get_param("use_server", True)
         self.b7_topic = rospy.get_param("bravo7_state_topic", "/bravo/gym_state")
@@ -39,6 +39,7 @@ class Bravo7StatePublisher:
         self.jointSub = rospy.Subscriber(self.joint_topic, JointState, self.joint_callback)
         self.eeSub = rospy.Subscriber(self.ee_topic, JointState, self.ee_callback)
         if self.use_server:
+            print("using server")
             self.b7statePub = rospy.Publisher(self.b7_topic, Bravo7State, queue_size=1)
         else:
             self.pos_socket = MLSocket()

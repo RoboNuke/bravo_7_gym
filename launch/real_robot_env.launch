@@ -1,5 +1,9 @@
 <launch>
-
+    <arg name="record_demos"
+        default="true"
+        doc="Will you need to record demos" 
+    />
+    
     <include file="$(find bravo_arm_sw)/launch/bravo_arm.launch">
         <arg  name="use_ps4_controller" value="false"/>
         <arg  name="with_trisect" value="false"/>
@@ -14,17 +18,10 @@
     </include>
 
     <include file="$(find bravo_controllers)/launch/compliance_controller.launch"/>
-
-    <!--group ns="actor">
-        <include file="$(find bravo_7_gym)/launch/socket_nodes.launch">
-            <arg name="state_port" value="53269"/>
-            <arg name="command_port" value="65432"/>
-        </include>
-    </group-->
     
-    <!--node name="eval_state_node" pkg="bravo_7_gym" type="bravo_7_state_pub_node.py" 
+    <node name="eval_state_node" pkg="bravo_7_gym" type="bravo_7_state_pub_node.py" 
         launch-prefix="xterm -hold -e"
-    /-->
+    />
 
     <node name="bravo_server" 
         pkg="bravo_7_gym" 
@@ -32,6 +29,22 @@
         ns="bravo" 
         launch-prefix="xterm -hold -e"
     />
+
+    <group if="$(eval arg('record_demos') == true)">
+        <!-- When recording you will open python window and have a version of
+            desired env running. You will then call env.reset(). Next, you will call
+            the "compliance_controller/enable_demo_mode and then start
+            the "record_ee_state" service and do your demo.  You will call 
+            "record_ee_state" again to end the recording. (Don't forget to include
+            the filepath in the shutoff call of the "record_ee_state"). When your done
+            recording you will need to diable demo mode before playback can happen.-->
+        <node name="trajectory_recorder"
+            pkg="bravo_controllers"
+            type="traj_record_playback.py"
+            ns="bravo"
+            launch-prefix="xterm -hold -e"
+        />
+    </group>
 
 </launch>
 

@@ -36,9 +36,10 @@ class BravoServer:
         self.ee_frame = rospy.get_param("compliance_controller/ee_frame", "ee_frame")
         self.world_frame = rospy.get_param("compliance_controller/world_frame", "bravo_base_link")
         # impedance service func
+        print("Waiting for toggle compliance controller service on ", self.toggle_cc_topic)
         rospy.wait_for_service(self.toggle_cc_topic)
         self.toggle_cc_srv = rospy.ServiceProxy(self.toggle_cc_topic, SetBool)
-        
+        self.stopCC()
         # robot state sub
         self.b7state_sub = rospy.Subscriber(self.state_topic, Bravo7State, self._stateCB)
         
@@ -165,6 +166,7 @@ def main(_):
     @webapp.route("/pose", methods=["POST"])
     def pose():
         pos = np.array(request.json["arr"])
+        print("Got pos:", pos)
         success = robot_server.setPoseGoal(pos)
         return jsonify({"success": success})
     
@@ -186,9 +188,9 @@ def main(_):
         playback = bool(request.json['playback'])
 
         print("Waiting for playback_ee_trajectory service...")
-        rospy.wait_for_service('/playback_ee_trajectory')
+        rospy.wait_for_service('/bravo/playback_ee_trajectory')
         print("\t Got it!")
-        serv = rospy.ServiceProxy('/playback_ee_trajectory', StartPlayback)
+        serv = rospy.ServiceProxy('/bravo/playback_ee_trajectory', StartPlayback)
         print("Got serv")
         res = serv(filepath, dt, steps, playback)
         print("Successful:", res.success)

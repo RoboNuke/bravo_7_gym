@@ -144,9 +144,9 @@ class Bravo7Env(gym.Env):
         if config.USE_CAMERAS:
             self.observation_space["images"] = gym.spaces.Dict(
                 {
-                    "wrist": gym.spaces.Box(
-                        0, 255, shape=(128, 128, 3), dtype=np.uint8
-                    ),
+                    #"wrist": gym.spaces.Box(
+                    #    0, 255, shape=(128, 128, 3), dtype=np.uint8
+                    #),
                     "world": gym.spaces.Box(
                         0, 255, shape=(128, 128, 3), dtype=np.uint8
                     ),
@@ -169,10 +169,11 @@ class Bravo7Env(gym.Env):
         xyz_delta = action[:3]
 
         self.nextpos = self.currpos.copy()
-        self.nextpos[:3] = self.nextpos[:3] + xyz_delta * self.action_scale[0]
+        self.nextpos[:2] = self.nextpos[:2] + xyz_delta[:2] * self.action_scale[0]
+        self.nextpos[2] = self.nextpos[2] + xyz_delta[2] * self.action_scale[1]
         # GET ORIENTATION FROM ACTION
         self.nextpos[3:] = (
-            Rotation.from_euler("xyz", action[3:6] * self.action_scale[1])*
+            Rotation.from_euler("xyz", action[3:6] * self.action_scale[2])*
             Rotation.from_quat(self.currpos[3:]) 
         ).as_quat()
         self._send_pos_command(self.clip_safety_box(self.nextpos))
@@ -256,10 +257,9 @@ class Bravo7Env(gym.Env):
             return copy.deepcopy(dict(state=state_obs))
 
     def reset(self, **kwargs):
-        #print("RESETING")
         if self.save_video:
             self.save_video_recording()
-
+        
         self.go_to_rest()
         self.curr_path_length = 0
 
@@ -282,6 +282,7 @@ class Bravo7Env(gym.Env):
 
     def getRand(self, r):
         return np.random.uniform(-r, r)
+    
     def go_to_rest(self):
         """
         The concrete steps to perform reset should be
@@ -377,11 +378,14 @@ class Bravo7Env(gym.Env):
         else:
             return ValueError(f"Camera {name} not recognized in cropping")
 
-    def save_video_recording(self):
+    def save_video_recording(self, eval_iter='', eval_count=''):
         try:
             if len(self.recording_frames):
+                name = ''
+                if not (eval_iter == '' or eval_count == ''):
+                    name = "evals/eval_" + str(eval_iter) + "_" + eval_count + "_"
                 video_writer = cv2.VideoWriter(
-                    self.save_path + f'{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.mp4',
+                    self.save_path + name + f'{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.mp4',
                     cv2.VideoWriter_fourcc(*"mp4v"),
                     10,
                     self.recording_frames[0].shape[:2][::-1],
